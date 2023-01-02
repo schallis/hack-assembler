@@ -11,7 +11,7 @@ This is my implementation of an Assembler for the Hack computer. This Assembler 
 
 ## General Strategy:
 
-We use a symbol table to store symbols like Labels e.g.`(LOOP)`, and Variables, both built-in e.g. `KBD` and `SCREEN` as well as user define e.g. `@i`. All of these jump to specific location (line number or memory location). Note that these variables can be used before their definition (forward references) so we must support this by perfoming two passes on the code, one two build the symbol table, and a second to do the actual translation.
+We use a symbol table to store symbols like Labels e.g.`(LOOP)`, and Variables, both built-in e.g. `KBD` and `SCREEN` as well as user defined e.g. `@i`. All of these jump to specific location (line number or memory location). Note that these variables can be used before their definition (forward references) so we must support this by perfoming two passes on the code, one two build the symbol table, and a second to do the actual translation.
 
 Variables find and reference an unallocated memory location. Labels reference a particular line number and act as a `GOTO`.
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 )
 
+// The line struct stores information about the lines we are translating
 type Line struct {
 	raw string
 
@@ -26,17 +27,30 @@ type Line struct {
 	translated string
 }
 
-// Is this line an instruction we should translate
+// Constructor for the Line type
+func NewLine(rawline string) Line {
+	line := Line{
+		raw: rawline,
+	}
+	line.clean()
+	line.classify()
+
+	return line
+}
+
+// Is A instruction?
+func (l *Line) isA() bool {
+	return l.instructionType == "A"
+}
+
+// Is C instruction?
 func (l *Line) isC() bool {
 	return l.instructionType == "C"
 }
 
+// Is Label?
 func (l *Line) isL() bool {
 	return l.instructionType == "L"
-}
-
-func (l *Line) isA() bool {
-	return l.instructionType == "A"
 }
 
 func (l *Line) clean() {
@@ -81,25 +95,14 @@ func (l *Line) classify() {
 	}
 }
 
-func NewLine(rawline string) Line {
-
-	line := Line{
-		raw: rawline,
-	}
-
-	line.clean()
-	line.classify()
-
-	return line
-}
-
+// Utility function for error handling
 func check(e error) {
 	if e != nil {
 		panic(e)
 	}
 }
 
-var FREEMEMLOC = 16
+var FREEMEMLOC = 15
 
 // Build the SymbolTable object with known knowns
 func generateSymbolTable() map[string]string {
