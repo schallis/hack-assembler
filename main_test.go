@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -12,16 +13,18 @@ func TestCInstructions(t *testing.T) {
 	}
 
 	symbols := generateSymbolTable()
-	buildSymbolTable(&symbols, "", 1)
 
 	for instruction, want := range tests {
 		// Test
-		ref := instruction
-		translate(&ref, &symbols)
+		line := NewLine(instruction)
+		line.lineNum = 1
+		// Only one line so do simultaneous first and second pass
+		updateSymbolTable(&symbols, line)
+		line.Translate(&symbols)
 
 		// Assert
-		if want != ref {
-			t.Fatalf(`Expected Translate("%v") = %q, got %q`, instruction, want, ref)
+		if want != line.translated {
+			t.Fatalf(`Expected Translate("%v") = %q, got %q`, instruction, want, line.translated)
 		}
 	}
 }
@@ -29,18 +32,20 @@ func TestCInstructions(t *testing.T) {
 func TestAInstruction(t *testing.T) {
 	// Setup
 	instruction := "@4"
-	ref := instruction
 	want := "0000000000000100"
 
 	symbols := generateSymbolTable()
-	buildSymbolTable(&symbols, "", 1)
 
 	// Test
-	translate(&ref, &symbols)
+	line := NewLine(instruction)
+	line.lineNum = 1
+	// Only one line so do simultaneous first and second pass
+	updateSymbolTable(&symbols, line)
+	line.Translate(&symbols)
 
 	// Assert
-	if want != ref {
-		t.Fatalf(`Expected Translate("%v") = %q, got %q`, instruction, want, ref)
+	if want != line.translated {
+		t.Fatalf(`Expected Translate("%v") = %q, got %q`, instruction, want, line.translated)
 	}
 }
 
@@ -48,68 +53,79 @@ func TestVariableInstruction(t *testing.T) {
 	// Setup
 	var tests = map[string]string{
 		"@LABEL": "0000010000000001",
+		// "@LABEL":  "0000000000000010", // Using a custom variable
 	}
 
 	symbols := generateSymbolTable()
-	buildSymbolTable(&symbols, "(LABEL)", 1024)
 
 	for instruction, want := range tests {
 		// Test
-		ref := instruction
-		translate(&ref, &symbols)
+		line := NewLine(instruction)
+		line.lineNum = 1024
+		// Only one line so do simultaneous first and second pass
+		updateSymbolTable(&symbols, line)
+		line.Translate(&symbols)
 
 		// Assert
-		if want != ref {
-			t.Fatalf(`Expected Translate("%v") = %q, got %q`, instruction, want, ref)
+		if want != line.translated {
+			t.Fatalf(`Expected Translate("%v") = %q, got %q`, instruction, want, line.translated)
 		}
 	}
 }
 
-func TestSymbolicInstruction(t *testing.T) {
+func TestBuiltinSymbolsInstruction(t *testing.T) {
 	// Setup
 	// Instruction -> expected binary
 	var tests = map[string]string{
 		"@R1":     "0000000000000001",
+		"@R15":    "0000000000001111",
 		"@KBD":    "0110000000000000", // Using built-in variables
 		"@SCREEN": "0100000000000000",
-		"@LABEL":  "0000000000000010", // Using a custom variable
-		// "(LABEL)": "",	// Should produce error (not an instruction)
 	}
 
 	// Build symbols with our custom label
 	symbols := generateSymbolTable()
-	buildSymbolTable(&symbols, "(LABEL)", 1)
+	// buildSymbolTable(&symbols, "(LABEL)", 1)
 
 	for instruction, want := range tests {
 		// Test
-		ref := instruction
-		translate(&ref, &symbols)
+		line := NewLine(instruction)
+		line.lineNum = 4
+		// Only one line so do simultaneous first and second pass
+		updateSymbolTable(&symbols, line)
+		line.Translate(&symbols)
 
 		// Assert
-		if want != ref {
-			t.Fatalf(`Expected Translate("%v") = %q, got %q`, instruction, want, ref)
+		if want != line.translated {
+			t.Fatalf(`Expected Translate("%v") = %q, got %q`, instruction, want, line.translated)
 		}
 	}
 }
 
-func TestCleanline(t *testing.T) {
-	// Setup
-	// instruction := "  MD=A-1 // Testing"
-	// want := "MD=A-1"
+// Test that the input lines gets classified and processes as expected
+func TestNewLine(t *testing.T) {
 
-	var tests = map[string]string{
-		"  MD=A-1 // Testing": "MD=A-1",
-		// "  (LABEL) ":          "(LABEL)",
-		"  @1 ": "@1",
+	// Setup
+	// rawline: [token, instructionType]
+	var tests = map[string][]string{
+		"  MD=A-1 // Testing":   {"MD=A-1", "C"},
+		"  MD = A-1 // Testing": {"MD=A-1", "C"},
+		"  (LABEL) ":            {"LABEL", "L"},
+		"  @1 ":                 {"1", "A"},
+		" ":                     {"", ""},
+		"// comment":            {"", ""},
 	}
 
-	for instruction, want := range tests {
+	for raw, want := range tests {
 		// Test
-		result, err := cleanline(instruction)
+		line := NewLine(raw)
+		log := fmt.Sprintf(`Tested %q Got token:%q type:%q`, raw, line.token, line.instructionType)
 
 		// Assert
-		if want != result || err != nil {
-			t.Fatalf(`Expected Cleanline("%v") = %q, got %q, %q`, instruction, want, result, err)
+		if want[0] != line.token || want[1] != line.instructionType {
+			t.Fatalf("%v, Wanted token:%q type:%q", log, want[0], want[1])
+		} else {
+			fmt.Println(log)
 		}
 	}
 }
@@ -118,12 +134,15 @@ func TestEmptyLine(t *testing.T) {
 	// Setup
 	instruction := " // Emptyline"
 	want := ""
+	symbols := generateSymbolTable()
 
 	// Test
-	result, err := cleanline(instruction)
+	line := NewLine(instruction)
+	line.lineNum = 1024
+	updateSymbolTable(&symbols, line)
 
 	// Assert
-	if want != result && err.Error() == "empty line" {
-		t.Fatalf(`Expected Cleanline("%v") = %q, got %q, %q`, instruction, want, result, err)
+	if want != line.stripped {
+		t.Fatalf(`Cleaned %q expected:%q got %q`, instruction, want, line.stripped)
 	}
 }

@@ -10,28 +10,88 @@ import (
 	"strings"
 )
 
-/*
-	General Strategy:
+type Line struct {
+	raw string
 
-		* Ignore comments (inline and line, indentation)
-		* Read line
-		* Break line into parts (ignore whitespace, semicolons etc.)
-		* Figure out:
-			A instruction or C instruction
-		* If C instruction
-			Lookup binary code for each token part (dest, comp, jmp)
-		* If A instruction
-			Convert from decimal to binary
-			Concatenate (with any required padding bits)
+	// computed values (by NewLine constructor)
+	stripped        string
+	token           string
+	empty           bool   // default: false
+	instructionType string // `A`, `C` or 'L' for Label
 
-	Symbols like Labels, Variables, KBD, SCREEN Etc.
-	e.g. loop, jump to specific location defined earlier
-	Support for variables, defined earlier
-	Both of these will require a symbol table mapping symbol to address
-	Find unallocated memory location, allocate and store
-	NOTE: will have to build symbol table in first pass,
-	then use second time around to support forward references
-*/
+	// computed in first pass
+	lineNum int
+
+	// computed in second pass
+	translated string
+}
+
+// Is this line an instruction we should translate
+func (l *Line) isC() bool {
+	return l.instructionType == "C"
+}
+
+func (l *Line) isL() bool {
+	return l.instructionType == "L"
+}
+
+func (l *Line) isA() bool {
+	return l.instructionType == "A"
+}
+
+func (l *Line) clean() {
+	// Strip trailing comments
+	before, _, _ := strings.Cut(l.raw, "//")
+
+	// Remove all whitespace
+	stripped := strings.Replace(before, " ", "", -1)
+
+	// Check for empty line
+	if len(stripped) == 0 {
+		l.empty = true
+	} else {
+		l.stripped = stripped
+	}
+}
+
+// Test if line is a label and return if it is. Error if not
+func (l *Line) getLabel() (string, error) {
+	last := len(l.stripped) - 1
+	if l.stripped[0] == '(' && l.stripped[last] == ')' {
+		return l.stripped[1:last], nil
+	}
+	return "", errors.New("not a label")
+}
+
+// Classify as A, C or L (Label)
+// or leave classification nil (e.g. for comments or blank lines)
+// Also store raw token e.g "@TOKEN" = "TOKEN" and "(LABEL)" = "LABEL"
+func (l *Line) classify() {
+	if !l.empty {
+		if l.stripped[0] == '@' {
+			l.instructionType = "A"
+			l.token = l.stripped[1:]
+		} else if label, err := l.getLabel(); err == nil {
+			l.instructionType = "L"
+			l.token = label
+		} else {
+			l.instructionType = "C"
+			l.token = l.stripped
+		}
+	}
+}
+
+func NewLine(rawline string) Line {
+
+	line := Line{
+		raw: rawline,
+	}
+
+	line.clean()
+	line.classify()
+
+	return line
+}
 
 func check(e error) {
 	if e != nil {
@@ -58,33 +118,29 @@ func generateSymbolTable() map[string]string {
 }
 
 // Read a line and determine if it is Symbol, storing and removing if it is
-func buildSymbolTable(symbolTable *map[string]string, line string, linenum int) error {
+func updateSymbolTable(symbolTable *map[string]string, line Line) error {
 
 	// Find labels e.g (LABEL) signified by parentheses
 	// Store in table as line num of next instruction
-	if len(line) > 0 {
-		if line[0] == '(' && line[len(line)-1] == ')' {
-			label := line[1 : len(line)-1]
-			(*symbolTable)[label] = fmt.Sprintf("%d", linenum+1)
-			log.Printf("Storing new label %v with line %v", label, linenum)
-		}
+	if line.isL() {
+		(*symbolTable)[line.token] = fmt.Sprintf("%d", line.lineNum)
+		log.Printf("Storing new label %v with line %v", line.token, line.lineNum)
+	}
 
-		// Find Variables e.g. @VAR
-		// We define these as @ proceeded by a string value
-		// We auto generate memory location (e.g. next after R15) and store in symbol table
-		if line[0] == '@' {
-			token := line[1:]
-			_, err := strconv.Atoi(token)
-			// If it errs we probably found a string
-			if err != nil {
-				// Only store if doesn't exist ()
-				if _, ok := (*symbolTable)[token]; !ok {
-					(*symbolTable)[token] = fmt.Sprintf("%d", FREEMEMLOC)
-					log.Printf("Storing new variable %v in location %v", token, FREEMEMLOC)
-					FREEMEMLOC += 1
-				} else {
-					log.Printf("Duplicate symbol found %v", token)
-				}
+	// Find Variables e.g. @VAR
+	// We define these as @ proceeded by a string value
+	// We auto generate memory location (e.g. next after R15) and store in symbol table
+	if line.isA() {
+		_, err := strconv.Atoi(line.token)
+		// If it errs we found a non-numeric string
+		if err != nil {
+			// Only store if doesn't exist
+			if _, ok := (*symbolTable)[line.token]; !ok {
+				(*symbolTable)[line.token] = fmt.Sprintf("%d", FREEMEMLOC)
+				log.Printf("Storing new variable %v in location %v", line.token, FREEMEMLOC)
+				FREEMEMLOC += 1
+			} else {
+				log.Printf("Duplicate symbol found %v", line.token)
 			}
 		}
 	}
@@ -92,40 +148,9 @@ func buildSymbolTable(symbolTable *map[string]string, line string, linenum int) 
 	return nil
 }
 
-// Take a line and return a version of it without whitepace and comments
-func cleanline(line string) (string, error) {
-
-	// Strip trailing comments
-	before, _, _ := strings.Cut(line, "//")
-
-	// Trim Trailing whitespace
-	stripped := strings.Split(before, " ")
-
-	var tokens []string
-
-	// Omit blank tokens
-	for _, t := range stripped {
-		if len(t) > 0 {
-			tokens = append(tokens, t)
-		}
-	}
-	// Check for empty line
-	if len(tokens) == 0 {
-		return "", errors.New("empty line")
-	}
-
-	token := tokens[0]
-	// // Check for label lines and remove (their location has already been stored in symbol table)
-	if token[0] == '(' && token[len(token)-1] == ')' {
-		return token, errors.New("label line")
-	}
-
-	return token, nil
-}
-
-// Take a cleaned line and translate it into binary
-// e.g. 1110110010011011 -> MD=A-1;JGE
-func translate(line *string, symbols *map[string]string) {
+// Take a line struct, translate it into binary and store translation
+// e.g. MD=A-1;JGE -> 1110110010011011
+func (line *Line) Translate(symbols *map[string]string) {
 
 	var dmap = map[string]string{
 		"null": "000",
@@ -182,43 +207,27 @@ func translate(line *string, symbols *map[string]string) {
 		"D|M": "1010101",
 	}
 
-	lineAsm := *line
-
-	// At this point all labels, comments etc. should have been removed (by Cleanlines)
-	// We are only dealing with A or C instruction
-
-	if lineAsm[0] == '(' {
-		*line = ""
-	} else if lineAsm[0] == '@' {
-		/*
-		 * A Instructions
-		 */
-
-		token := lineAsm[1:]
-		symbol := (*symbols)[token]
+	if line.isA() {
+		// See if there is a lookup
+		symbol := (*symbols)[line.token]
 		if symbol != "" {
-			// Found symbol, use lookup instead
-			token = symbol
-		} // Else treating as number
-
-		// See if we have a number
-		num, err := strconv.Atoi(token)
-		if err != nil {
-			// We must have a variable, so look it up
-			addr := (*symbols)[token]
-			addri, err := strconv.Atoi(addr)
-			num = addri
+			// Found symbol, convert to number and translate that
+			number, err := strconv.Atoi(symbol)
 			if err != nil {
-				log.Fatalf("Tried to lookup symbol %v, Failed. %v", lineAsm, err)
+				// Symbol lookup wasn't an address or line number
+				log.Fatalf("Symbol %q lookup not a number %v, Failed. %v", line.token, symbol, err)
 			}
+			line.translated = fmt.Sprintf("%016b", number)
+		} else {
+			// Not found, assume number
+			number, err := strconv.Atoi(line.token)
+			if err != nil {
+				// Not number, must be a missing symbol
+				log.Fatalf("Tried to lookup symbol %v, Failed. %v", line.token, err)
+			}
+			line.translated = fmt.Sprintf("%016b", number)
 		}
-		*line = fmt.Sprintf("%016b", num) // Convert to base 2, pad with zeroes
-	} else {
-		/*
-		 * C Instructions
-		 * dest = comp ; jump
-		 */
-
+	} else if line.isC() {
 		i := 1
 		x := 11
 		dest := "000"
@@ -228,7 +237,7 @@ func translate(line *string, symbols *map[string]string) {
 		// Determine Jump
 		// Split on `;` producing [dest/comp, jump]
 		destcomp := comp
-		jumpsplit := strings.Split(lineAsm, ";")
+		jumpsplit := strings.Split(line.token, ";")
 		destcomp = jumpsplit[0]
 		if len(jumpsplit) > 1 {
 			// We have a jump e.g. 0;JMP
@@ -248,10 +257,11 @@ func translate(line *string, symbols *map[string]string) {
 		}
 
 		// Use lookup tables to determine a, d, j
-		*line = fmt.Sprintf("%v%v%v%v%v", i, x, comp, dest, jump)
+		line.translated = fmt.Sprintf("%v%v%v%v%v", i, x, comp, dest, jump)
+	} else {
+		// Can only translate A or C instruction
+		log.Fatalf("Attempted to translate non-instruction: %q", line.stripped)
 	}
-
-	log.Printf("%v	%v", *line, lineAsm)
 }
 
 // Read a .asm file specified as the only argument
@@ -283,30 +293,32 @@ func main() {
 
 	symbolTable := generateSymbolTable()
 
-	// Scan all lines, clean, classify and add to symbol table
-	// Store cleaned lines in var lines (only instructions)
-	var lines []string
-	linenum := 1
+	// First Pass
+	var processedLines []*Line
+	lineNum := 0
 	for scanner.Scan() {
-		line := scanner.Text()
+		text := scanner.Text()
+		inLine := NewLine(text)
+		inLine.lineNum = lineNum
 
-		// Preprocess
-		cleaned, err1 := cleanline(line)
-		err2 := buildSymbolTable(&symbolTable, cleaned, linenum)
-		if err1 != nil || err2 != nil {
-			log.Printf("Error in preprocessing: %v %v", err1, err2)
-		} else {
-			// Increment linenum if A or C instruction
-			linenum += 1
-			lines = append(lines, cleaned)
+		// Store line for second pass with computed line number
+		if inLine.isA() || inLine.isC() {
+			lineNum += 1
+			processedLines = append(processedLines, &inLine)
+		}
+
+		// Find any symbols and add them to the table
+		err := updateSymbolTable(&symbolTable, inLine)
+		if err != nil {
+			log.Printf("Error updating symbols: %v", err)
 		}
 	}
 
-	// Translate each line
-	var output []string
-	for _, line := range lines {
-		translate(&line, &symbolTable) // Translate in place
-		output = append(output, line)
+	// Second Pass
+	var outLines []*Line
+	for _, line := range processedLines {
+		line.Translate(&symbolTable)
+		outLines = append(outLines, line)
 	}
 
 	// Open output file for writing
@@ -318,14 +330,20 @@ func main() {
 	// Write each line token as a line in the output file
 	w := bufio.NewWriter(ofile)
 	var newline string
-	for linenum, t := range output {
+	for lineNum, t := range outLines {
 		// Omit newline if last line of file or if empty line
-		if (linenum != len(output)-1) && len(t) > 0 {
+		if lineNum != len(outLines)-1 {
 			newline = "\n"
 		} else {
 			newline = ""
 		}
-		line := fmt.Sprintf("%v%v", t, newline)
+		DEBUG := false
+		var line string
+		if DEBUG {
+			line = fmt.Sprintf("%-3v %-16v %v%v", t.lineNum, t.stripped, t.translated, newline)
+		} else {
+			line = fmt.Sprintf("%v%v", t.translated, newline)
+		}
 		_, err = w.WriteString(line)
 		check(err)
 	}
