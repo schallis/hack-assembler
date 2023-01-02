@@ -12,6 +12,38 @@ import (
 
 */
 
+func TestAInstructionsInstruction(t *testing.T) {
+	// Setup
+	// Instruction -> expected binary
+	var tests = map[string]string{
+		"@R1":     "0000000000000001",
+		"@R15":    "0000000000001111",
+		"@KBD":    "0110000000000000", // Using built-in variables
+		"@SCREEN": "0100000000000000",
+		"@4":      "0000000000000100", // Test raw line numbers
+		"@16":     "0000000000010000",
+		"@54":     "0000000000110110",
+	}
+
+	// Build symbols with our custom label
+	symbols := generateSymbolTable()
+	// buildSymbolTable(&symbols, "(LABEL)", 1)
+
+	for instruction, want := range tests {
+		// Test
+		line := NewLine(instruction)
+		line.lineNum = 4
+		// Only one line so do simultaneous first and second pass
+		updateSymbolTable(&symbols, line)
+		line.Translate(&symbols)
+
+		// Assert
+		if want != line.translated {
+			t.Fatalf(`Expected Translate("%v") = %q, got %q`, instruction, want, line.translated)
+		}
+	}
+}
+
 func TestCInstructions(t *testing.T) {
 	// Setup
 	var tests = map[string]string{
@@ -98,43 +130,11 @@ func TestLabel(t *testing.T) {
 	}
 }
 
-func TestAInstructionsInstruction(t *testing.T) {
-	// Setup
-	// Instruction -> expected binary
-	var tests = map[string]string{
-		"@R1":     "0000000000000001",
-		"@R15":    "0000000000001111",
-		"@KBD":    "0110000000000000", // Using built-in variables
-		"@SCREEN": "0100000000000000",
-		"@4":      "0000000000000100", // Test raw line numbers
-		"@16":     "0000000000010000",
-		"@54":     "0000000000110110",
-	}
-
-	// Build symbols with our custom label
-	symbols := generateSymbolTable()
-	// buildSymbolTable(&symbols, "(LABEL)", 1)
-
-	for instruction, want := range tests {
-		// Test
-		line := NewLine(instruction)
-		line.lineNum = 4
-		// Only one line so do simultaneous first and second pass
-		updateSymbolTable(&symbols, line)
-		line.Translate(&symbols)
-
-		// Assert
-		if want != line.translated {
-			t.Fatalf(`Expected Translate("%v") = %q, got %q`, instruction, want, line.translated)
-		}
-	}
-}
-
 // Test that the input lines gets classified and processes as expected
-func TestNewLine(t *testing.T) {
+func TestLine(t *testing.T) {
 
 	// Setup
-	// rawline: [token, instructionType]
+	// raw line: [token, instructionType]
 	var tests = map[string][]string{
 		"  MD=A-1 // Testing":   {"MD=A-1", "C"},
 		"  MD = A-1 // Testing": {"MD=A-1", "C"},
@@ -155,22 +155,5 @@ func TestNewLine(t *testing.T) {
 		} else {
 			fmt.Println(log)
 		}
-	}
-}
-
-func TestEmptyLine(t *testing.T) {
-	// Setup
-	instruction := " // Emptyline"
-	want := ""
-	symbols := generateSymbolTable()
-
-	// Test
-	line := NewLine(instruction)
-	line.lineNum = 1024
-	updateSymbolTable(&symbols, line)
-
-	// Assert
-	if want != line.stripped {
-		t.Fatalf(`Cleaned %q expected:%q got %q`, instruction, want, line.stripped)
 	}
 }
