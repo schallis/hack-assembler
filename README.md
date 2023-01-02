@@ -13,6 +13,13 @@ The specification is described [here](https://www.nand2tetris.org/_files/ugd/440
 ## Test Suite
 
 	> go test
+
+
+## TODO
+
+- [ ] Break into libraries
+- [ ] Increase test coverage to >80%
+
 	
 
 ## General Strategy:
