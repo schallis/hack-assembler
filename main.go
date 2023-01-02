@@ -105,28 +105,28 @@ func check(e error) {
 var FREEMEMLOC = 15
 
 // Build the SymbolTable object with known knowns
-func generateSymbolTable() map[string]string {
+func generateSymbolTable() map[string]int {
 	// Some symbols we already know e.g. @KBD, @SCREEN
-	var symbolTable = map[string]string{
-		"KBD":    "24576",
-		"SCREEN": "16384",
+	var symbolTable = map[string]int{
+		"KBD":    24576,
+		"SCREEN": 16384,
 	}
 
 	// Store R1-R15 in symbol table as addresses 1-15
 	for i := 0; i < 16; i++ {
-		symbolTable[fmt.Sprintf("R%d", i)] = fmt.Sprintf("%d", i)
+		symbolTable[fmt.Sprintf("R%d", i)] = i
 	}
 
 	return symbolTable
 }
 
 // Read a line and determine if it is Symbol, storing and removing if it is
-func updateSymbolTable(symbolTable *map[string]string, line Line) error {
+func updateSymbolTable(symbolTable *map[string]int, line Line) error {
 
 	// Find labels e.g (LABEL) signified by parentheses
 	// Store in table as line num of next instruction
 	if line.isL() {
-		(*symbolTable)[line.token] = fmt.Sprintf("%d", line.lineNum)
+		(*symbolTable)[line.token] = line.lineNum
 		log.Printf("Storing new label %v with line %v", line.token, line.lineNum)
 	}
 
@@ -139,7 +139,7 @@ func updateSymbolTable(symbolTable *map[string]string, line Line) error {
 		if err != nil {
 			// Only store if doesn't exist
 			if _, ok := (*symbolTable)[line.token]; !ok {
-				(*symbolTable)[line.token] = fmt.Sprintf("%d", FREEMEMLOC)
+				(*symbolTable)[line.token] = FREEMEMLOC
 				log.Printf("Storing new variable %v in location %v", line.token, FREEMEMLOC)
 				FREEMEMLOC += 1
 			} else {
@@ -153,7 +153,7 @@ func updateSymbolTable(symbolTable *map[string]string, line Line) error {
 
 // Take a line struct, translate it into binary and store translation
 // e.g. MD=A-1;JGE -> 1110110010011011
-func (line *Line) Translate(symbols *map[string]string) {
+func (line *Line) Translate(symbols *map[string]int) {
 
 	var dmap = map[string]string{
 		"null": "000",
@@ -212,14 +212,9 @@ func (line *Line) Translate(symbols *map[string]string) {
 
 	if line.isA() {
 		// See if there is a lookup
-		symbol := (*symbols)[line.token]
-		if symbol != "" {
-			// Found symbol, convert to number and translate that
-			number, err := strconv.Atoi(symbol)
-			if err != nil {
-				// Symbol lookup wasn't an address or line number
-				log.Fatalf("Symbol %q lookup not a number %v, Failed. %v", line.token, symbol, err)
-			}
+		number, ok := (*symbols)[line.token]
+		if ok {
+			// Found symbol so translate
 			line.translated = fmt.Sprintf("%016b", number)
 		} else {
 			// Not found, assume number

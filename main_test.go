@@ -5,6 +5,14 @@ import (
 	"testing"
 )
 
+/* TODO
+
+- Test line counting (it's zero indexed)
+- Test storing labels
+-
+
+*/
+
 func TestCInstructions(t *testing.T) {
 	// Setup
 	var tests = map[string]string{
