@@ -142,6 +142,11 @@ func updateSymbolTable(symbolTable *map[string]int, line Line) error {
 	// Labels are always uppercase, Variables are always lowercase
 	// Store in table as line num of next instruction
 	if line.isL() && uppercase {
+		label, exists := (*symbolTable)[line.token]
+		if exists {
+			log.Printf("Label %q duplicate definition", label)
+			return errors.New("invalid")
+		}
 		(*symbolTable)[line.token] = line.lineNum
 		log.Printf("Storing new label %v with line %v", line.token, line.lineNum)
 	}
@@ -241,7 +246,7 @@ func (line *Line) Translate(symbols *map[string]int) {
 			}
 			// It is, treat as raw line number e.g. R16 -> line 16
 			line.translated = fmt.Sprintf("%016b", number)
-			log.Printf("Found raw line %q. Using as line %d", line.stripped, number)
+			// log.Printf("Found raw line %q. Using as line %d", line.stripped, number)
 		}
 	} else if line.isC() {
 		i := 1
@@ -310,6 +315,7 @@ func main() {
 	symbolTable := generateSymbolTable()
 
 	// First Pass
+	log.Println("Starting first pass")
 	var processedLines []*Line
 	lineNum := 0
 	for scanner.Scan() {
@@ -328,6 +334,7 @@ func main() {
 	}
 
 	// Second Pass
+	log.Println("Starting second pass")
 	var outLines []*Line
 	for _, line := range processedLines {
 		line.Translate(&symbolTable)
@@ -335,6 +342,7 @@ func main() {
 	}
 
 	// Open output file for writing
+	log.Println("Writing output")
 	filenameo := "output.hack"
 	ofile, err := os.Create(filenameo)
 	check(err)
