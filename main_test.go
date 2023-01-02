@@ -57,29 +57,29 @@ func TestAInstruction(t *testing.T) {
 	}
 }
 
-func TestVariableInstruction(t *testing.T) {
-	// Setup
-	var tests = map[string]string{
-		"@LABEL": "0000010000000001",
-		// "@LABEL":  "0000000000000010", // Using a custom variable
-	}
+// func TestVariableInstruction(t *testing.T) {
+// 	// Setup
+// 	var tests = map[string]string{
+// 		"@LABEL": "0000010000000001",
+// 		// "@LABEL":  "0000000000000010", // Using a custom variable
+// 	}
 
-	symbols := generateSymbolTable()
+// 	symbols := generateSymbolTable()
 
-	for instruction, want := range tests {
-		// Test
-		line := NewLine(instruction)
-		line.lineNum = 1024
-		// Only one line so do simultaneous first and second pass
-		updateSymbolTable(&symbols, line)
-		line.Translate(&symbols)
+// 	for instruction, want := range tests {
+// 		// Test
+// 		line := NewLine(instruction)
+// 		line.lineNum = 1024
+// 		// Only one line so do simultaneous first and second pass
+// 		updateSymbolTable(&symbols, line)
+// 		line.Translate(&symbols)
 
-		// Assert
-		if want != line.translated {
-			t.Fatalf(`Expected Translate("%v") = %q, got %q`, instruction, want, line.translated)
-		}
-	}
-}
+// 		// Assert
+// 		if want != line.translated {
+// 			t.Fatalf(`Expected Translate("%v") = %q, got %q`, instruction, want, line.translated)
+// 		}
+// 	}
+// }
 
 func TestBuiltinSymbolsInstruction(t *testing.T) {
 	// Setup

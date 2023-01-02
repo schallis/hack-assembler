@@ -108,6 +108,11 @@ var FREEMEMLOC = 15
 func generateSymbolTable() map[string]int {
 	// Some symbols we already know e.g. @KBD, @SCREEN
 	var symbolTable = map[string]int{
+		"SP":     0,
+		"LCL":    1,
+		"ARG":    2,
+		"THIS":   3,
+		"THAT":   4,
 		"KBD":    24576,
 		"SCREEN": 16384,
 	}
@@ -135,10 +140,10 @@ func updateSymbolTable(symbolTable *map[string]int, line Line) error {
 	// We auto generate memory location (e.g. next after R15) and store in symbol table
 	if line.isA() {
 		_, err := strconv.Atoi(line.token)
-		// If it errs we found a non-numeric string
 		if err != nil {
-			// Only store if doesn't exist
+			// If it errs we found a non-numeric string
 			if _, ok := (*symbolTable)[line.token]; !ok {
+				// Only store if doesn't exist
 				(*symbolTable)[line.token] = FREEMEMLOC
 				log.Printf("Storing new variable %v in location %v", line.token, FREEMEMLOC)
 				FREEMEMLOC += 1
