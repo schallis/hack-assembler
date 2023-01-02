@@ -9,8 +9,6 @@ import (
 /* TODO
 
 - Test line counting (it's zero indexed)
-- Test storing labels
--
 
 */
 

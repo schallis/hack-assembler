@@ -1,19 +1,25 @@
 # Hack Assembler (from Nand2Tetris Part I Unit 6)
 
-This is my implementation of an Assembler for the Hack computer. This Assembler is written in Go and consistutes my first real Go program.
+This is my implementation of an Assembler for the Hack computer to fulfill the requirements of the [Nand2Tetris](https://www.nand2tetris.org/course) course. This Assembler is written in Go and translates Hack Assembly files into machine code that runs on the computer built during the course.
+
+The specification is described [here](https://www.nand2tetris.org/_files/ugd/44046b_89a8e226476741a3b7c5204575b8a0b2.pdf)
 
 ## Usage
 
 	> go build main.go
 	> ./main input.asm
 	(outputs to output.hack)
+
+## Test Suite
+
+	> go test
 	
 
 ## General Strategy:
 
-We use a symbol table to store symbols like Labels e.g.`(LOOP)`, and Variables, both built-in e.g. `KBD` and `SCREEN` as well as user defined e.g. `@i`. All of these jump to specific location (line number or memory location). Note that these variables can be used before their definition (forward references) so we must support this by perfoming two passes on the code, one two build the symbol table, and a second to do the actual translation.
+We use a symbol table to store symbols such as Labels (e.g.`(LOOP)`) and Variables (both built-in e.g. `KBD` as well as user defined e.g. `@my-variable`). All of these jump to specific location (line number or memory location). Note that these variables can be used before their definition (i.e. forward references) so we must support this by perfoming two passes on the code, one two build the symbol table, and a second to do the actual translation.
 
-Variables find and reference an unallocated memory location. Labels reference a particular line number and act as a `GOTO`.
+Variables are assigned to unallocated memory locations. Labels reference a particular line number and act as a `GOTO`.
 
 ### First pass
 - Classify all lines, keeping only A and C instruction for further processing
