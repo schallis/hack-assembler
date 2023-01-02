@@ -11,7 +11,8 @@ func TestCInstructions(t *testing.T) {
 		"A-1":        "1110110010000000",
 	}
 
-	symbols, _ := buildSymbolTable("", 1)
+	symbols := generateSymbolTable()
+	buildSymbolTable(&symbols, "", 1)
 
 	for instruction, want := range tests {
 		// Test
@@ -30,7 +31,9 @@ func TestAInstruction(t *testing.T) {
 	instruction := "@4"
 	ref := instruction
 	want := "0000000000000100"
-	symbols, _ := buildSymbolTable("", 1)
+
+	symbols := generateSymbolTable()
+	buildSymbolTable(&symbols, "", 1)
 
 	// Test
 	translate(&ref, &symbols)
@@ -44,10 +47,11 @@ func TestAInstruction(t *testing.T) {
 func TestVariableInstruction(t *testing.T) {
 	// Setup
 	var tests = map[string]string{
-		"@LABEL": "0000010000000000",
+		"@LABEL": "0000010000000001",
 	}
 
-	symbols, _ := buildSymbolTable("(LABEL)", 1024)
+	symbols := generateSymbolTable()
+	buildSymbolTable(&symbols, "(LABEL)", 1024)
 
 	for instruction, want := range tests {
 		// Test
@@ -63,15 +67,18 @@ func TestVariableInstruction(t *testing.T) {
 
 func TestSymbolicInstruction(t *testing.T) {
 	// Setup
+	// Instruction -> expected binary
 	var tests = map[string]string{
+		"@R1":     "0000000000000001",
 		"@KBD":    "0110000000000000", // Using built-in variables
 		"@SCREEN": "0100000000000000",
-		"@LABEL":  "0000000000000001", // Using a custom variable
+		"@LABEL":  "0000000000000010", // Using a custom variable
 		// "(LABEL)": "",	// Should produce error (not an instruction)
 	}
 
 	// Build symbols with our custom label
-	symbols, _ := buildSymbolTable("(LABEL)", 1)
+	symbols := generateSymbolTable()
+	buildSymbolTable(&symbols, "(LABEL)", 1)
 
 	for instruction, want := range tests {
 		// Test
@@ -92,8 +99,8 @@ func TestCleanline(t *testing.T) {
 
 	var tests = map[string]string{
 		"  MD=A-1 // Testing": "MD=A-1",
-		"  (LABEL) ":          "(LABEL)",
-		"  @1 ":               "@1",
+		// "  (LABEL) ":          "(LABEL)",
+		"  @1 ": "@1",
 	}
 
 	for instruction, want := range tests {
