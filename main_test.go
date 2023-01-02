@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"testing"
 )
 
@@ -37,51 +38,69 @@ func TestCInstructions(t *testing.T) {
 	}
 }
 
-func TestAInstruction(t *testing.T) {
+func TestVariables(t *testing.T) {
 	// Setup
-	instruction := "@4"
-	want := "0000000000000100"
+	var tests = map[string]string{
+		// labels should be assigned free spaces incrementally
+		"@variable1":   "0000000000010000",
+		"@NOTVARIABLE": "shouldnottranslate", // Labels are uppercase
+		"@variable2":   "0000000000010001",
+	}
 
 	symbols := generateSymbolTable()
 
 	// Test
-	line := NewLine(instruction)
-	line.lineNum = 1
-	// Only one line so do simultaneous first and second pass
-	updateSymbolTable(&symbols, line)
-	line.Translate(&symbols)
+	for instruction, want := range tests {
+		line := NewLine(instruction)
+		line.lineNum = 1025
+		err := updateSymbolTable(&symbols, line)
+		if err == nil {
+			line.Translate(&symbols)
+			// Assert Valid
+			if want != line.translated {
+				t.Fatalf(`Expected Translate("%v") = %q, got %q`, instruction, want, line.translated)
+			}
+		} else {
+			// Assert Invalid
+			if err.Error() != "invalid" {
+				t.Fatalf("Invalid Variable not throwing error")
+			}
+		}
 
-	// Assert
-	if want != line.translated {
-		t.Fatalf(`Expected Translate("%v") = %q, got %q`, instruction, want, line.translated)
 	}
 }
 
-// func TestVariableInstruction(t *testing.T) {
-// 	// Setup
-// 	var tests = map[string]string{
-// 		"@LABEL": "0000010000000001",
-// 		// "@LABEL":  "0000000000000010", // Using a custom variable
-// 	}
+func TestLabel(t *testing.T) {
+	// Setup
+	var tests = map[string][]string{
+		// label ref, label def, translation, linenum
+		"@LABEL": {"(LABEL)", "0000010000000000", "1024"},
+	}
 
-// 	symbols := generateSymbolTable()
+	symbols := generateSymbolTable()
 
-// 	for instruction, want := range tests {
-// 		// Test
-// 		line := NewLine(instruction)
-// 		line.lineNum = 1024
-// 		// Only one line so do simultaneous first and second pass
-// 		updateSymbolTable(&symbols, line)
-// 		line.Translate(&symbols)
+	// Test
+	for instruction, want := range tests {
+		// Mock the definition of a label
+		preline := NewLine(want[0])
+		lineAsInt, _ := strconv.Atoi(want[2])
+		preline.lineNum = lineAsInt
+		updateSymbolTable(&symbols, preline)
 
-// 		// Assert
-// 		if want != line.translated {
-// 			t.Fatalf(`Expected Translate("%v") = %q, got %q`, instruction, want, line.translated)
-// 		}
-// 	}
-// }
+		// Now test the next line which references it
+		line := NewLine(instruction)
+		line.lineNum = 1025
+		updateSymbolTable(&symbols, line)
+		line.Translate(&symbols)
 
-func TestBuiltinSymbolsInstruction(t *testing.T) {
+		// Assert
+		if want[1] != line.translated {
+			t.Fatalf(`Expected Translate("%v") = %q, got %q`, instruction, want[1], line.translated)
+		}
+	}
+}
+
+func TestAInstructionsInstruction(t *testing.T) {
 	// Setup
 	// Instruction -> expected binary
 	var tests = map[string]string{
@@ -89,6 +108,9 @@ func TestBuiltinSymbolsInstruction(t *testing.T) {
 		"@R15":    "0000000000001111",
 		"@KBD":    "0110000000000000", // Using built-in variables
 		"@SCREEN": "0100000000000000",
+		"@4":      "0000000000000100", // Test raw line numbers
+		"@16":     "0000000000010000",
+		"@54":     "0000000000110110",
 	}
 
 	// Build symbols with our custom label

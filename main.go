@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+var FREEMEMLOC = 16 // After R1-15
+
 // The line struct stores information about the lines we are translating
 type Line struct {
 	raw string
@@ -102,8 +104,6 @@ func check(e error) {
 	}
 }
 
-var FREEMEMLOC = 15
-
 // Build the SymbolTable object with known knowns
 func generateSymbolTable() map[string]int {
 	// Some symbols we already know e.g. @KBD, @SCREEN
@@ -126,33 +126,44 @@ func generateSymbolTable() map[string]int {
 }
 
 // Read a line and determine if it is Symbol, storing and removing if it is
+// Return an error if invalid symbol (e.g. incorrectly cased variable)
 func updateSymbolTable(symbolTable *map[string]int, line Line) error {
+	uppercase := strings.ToUpper(line.token) == line.token
+	lowercase := strings.ToLower(line.token) == line.token
+	_, err := strconv.Atoi(line.token)
+	nonNumeric := err != nil
+
+	// @LABEL	 -> label, stored above, not here
+	// @variable -> store in next free memory location
+	// @15		 -> builtin, already stored
+	// @52		 -> line number, not stored, used as is
 
 	// Find labels e.g (LABEL) signified by parentheses
+	// Labels are always uppercase, Variables are always lowercase
 	// Store in table as line num of next instruction
-	if line.isL() {
+	if line.isL() && uppercase {
 		(*symbolTable)[line.token] = line.lineNum
 		log.Printf("Storing new label %v with line %v", line.token, line.lineNum)
 	}
 
-	// Find Variables e.g. @VAR
-	// We define these as @ proceeded by a string value
+	// Find Variables e.g. @var
+	// We define these as @ proceeded by a *lowercase* string value
+	// We discrimiate against numerics e.g. @16 which aren't stored and refer to the literal line number
 	// We auto generate memory location (e.g. next after R15) and store in symbol table
-	if line.isA() {
-		_, err := strconv.Atoi(line.token)
-		if err != nil {
-			// If it errs we found a non-numeric string
-			if _, ok := (*symbolTable)[line.token]; !ok {
-				// Only store if doesn't exist
-				(*symbolTable)[line.token] = FREEMEMLOC
-				log.Printf("Storing new variable %v in location %v", line.token, FREEMEMLOC)
-				FREEMEMLOC += 1
-			} else {
-				log.Printf("Duplicate symbol found %v", line.token)
-			}
+	if line.isA() && lowercase && nonNumeric {
+		// We have something r/lineNumesembling a variable
+		_, found := (*symbolTable)[line.token]
+		if !found {
+			// Variable not stored yet so do that
+			(*symbolTable)[line.token] = FREEMEMLOC
+			log.Printf("Storing new variable %v in location %v", line.token, FREEMEMLOC)
+			FREEMEMLOC++
 		}
+	} else {
+		// All other instructions don't need storing
+		// This includes all regular instructions too
+		return errors.New("invalid")
 	}
-
 	return nil
 }
 
@@ -217,18 +228,20 @@ func (line *Line) Translate(symbols *map[string]int) {
 
 	if line.isA() {
 		// See if there is a lookup
-		number, ok := (*symbols)[line.token]
-		if ok {
-			// Found symbol so translate
+		number, found := (*symbols)[line.token]
+		if found {
+			// Found symbol so translate e.g. @R1 -> 1
 			line.translated = fmt.Sprintf("%016b", number)
 		} else {
-			// Not found, assume number
+			// Not found, is it a number?
 			number, err := strconv.Atoi(line.token)
 			if err != nil {
-				// Not number, must be a missing symbol
+				// Not number, must be a missing symbol e.g. @MISSING
 				log.Fatalf("Tried to lookup symbol %v, Failed. %v", line.token, err)
 			}
+			// It is, treat as raw line number e.g. R16 -> line 16
 			line.translated = fmt.Sprintf("%016b", number)
+			log.Printf("Found raw line %q. Using as line %d", line.stripped, number)
 		}
 	} else if line.isC() {
 		i := 1
@@ -280,7 +293,7 @@ func main() {
 	if len(args) < 2 || args[1] == "" {
 		log.Printf("No filename specified as first arg. Defaulting to input.asm")
 		// filename = "input.asm"
-		filename = "/Users/stevenchallis/Desktop/nand2tetris/projects/06/max/Max.asm"
+		filename = "materials/pong/Pong.asm"
 	} else {
 		filename = args[1]
 	}
@@ -311,10 +324,7 @@ func main() {
 		}
 
 		// Find any symbols and add them to the table
-		err := updateSymbolTable(&symbolTable, inLine)
-		if err != nil {
-			log.Printf("Error updating symbols: %v", err)
-		}
+		updateSymbolTable(&symbolTable, inLine)
 	}
 
 	// Second Pass
